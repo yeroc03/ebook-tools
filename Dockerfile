@@ -1,29 +1,48 @@
-FROM debian:sid-slim
+# ebook-tools with a current calibre: every script in this repository, plus
+# calibre's command-line tools (calibredb, ebook-meta, fetch-ebook-metadata,
+# ebook-convert) and the OCR and document tools the scripts use.
+#
+#   docker build -t ebook-tools .
+#   docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/books" -w /books \
+#       ebook-tools organize-ebooks.sh --output-folder=organized unorganized/
+#
+# Published as ghcr.io/yeroc03/ebook-tools by .github/workflows/docker.yml.
+#
+# What changed from the original Dockerfile, and why:
+# - Debian stable instead of sid, and no python-lxml (Python 2, gone from
+#   Debian): the original no longer builds.
+# - No Goodreads or WorldCat plugins: both services have shut their APIs
+#   down. calibre's own sources (Amazon.com, Google) do the fetching; choose
+#   with ISBN_METADATA_FETCH_ORDER.
+# - No ENTRYPOINT: any tool in the image runs directly (organize-ebooks.sh,
+#   calibredb ...), and plain `docker run -it` gives bash.
+# - No fixed user: it runs as whatever --user it's given, with HOME=/tmp so
+#   calibre can keep its settings whoever that is.
+# - The scripts are copied from this repository, not downloaded, so an
+#   image is exactly the commit it was built from.
+FROM debian:trixie-slim
 
-ENTRYPOINT ["bash"]
+RUN apt-get update \
+ && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      calibre file bash coreutils gawk sed grep p7zip-full \
+      tesseract-ocr tesseract-ocr-osd tesseract-ocr-eng \
+      poppler-utils catdoc djvulibre-bin ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
 
-RUN apt-get update && \
-    apt-get --no-install-recommends -y install file less bash coreutils gawk sed grep calibre p7zip-full tesseract-ocr tesseract-ocr-osd tesseract-ocr-eng python-lxml poppler-utils catdoc djvulibre-bin locales curl ca-certificates && \
-    rm -rf /var/lib/apt/lists/* && \
-    localedef -i en_US -c -f UTF-8 en_US.UTF-8 && \
-    useradd -mUs /usr/bin/bash -u 1000 user && \
-    mkdir /ebook-tools && \
-    chown user:user /ebook-tools
+COPY *.sh /ebook-tools/
+RUN chmod a+rx /ebook-tools/*.sh
+
+ENV PATH="${PATH}:/ebook-tools" \
+    LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
+    QT_QPA_PLATFORM=offscreen \
+    HOME=/tmp
+
+LABEL org.opencontainers.image.source="https://github.com/yeroc03/ebook-tools" \
+      org.opencontainers.image.description="ebook-tools (na--/ebook-tools) with a current calibre" \
+      org.opencontainers.image.licenses="GPL-3.0-only"
 
 WORKDIR /ebook-tools
-
-ENV LANG="en_US.UTF-8" PATH="${PATH}:/ebook-tools"
-
-USER user
-
-RUN curl 'https://www.mobileread.com/forums/attachment.php?attachmentid=163537' > goodreads.zip && \
-    sha256sum 'goodreads.zip' | grep -q 'c44f88222017aaad0aa1a674e69f46b309198269c7f13ebd671ae942052d45a8' && \
-    calibre-customize --add-plugin goodreads.zip && \
-    rm goodreads.zip && \
-    curl -L 'https://github.com/na--/calibre-worldcat-xisbn-metadata-plugin/archive/0.1.zip' > worldcat.zip && \
-    sha256sum worldcat.zip | grep -q 'bedddcd736382baf95fed2c38698ded15b0d8fbd8085bacd1a4b4766e972dd4d' && \
-    7z x worldcat.zip && \
-    calibre-customize --build-plugin calibre-worldcat-xisbn-metadata-plugin-0.1/ && \
-    rm -rf worldcat.zip calibre-worldcat-xisbn-metadata-plugin-0.1
-
-COPY . /ebook-tools
+RUN command -v organize-ebooks.sh calibredb ebook-meta fetch-ebook-metadata ebook-convert \
+      tesseract pdftotext catdoc djvutxt 7z
+CMD ["bash"]

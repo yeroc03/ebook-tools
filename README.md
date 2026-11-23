@@ -1,5 +1,20 @@
 # eBook Tools
 
+> **This fork** keeps ebook-tools' scripts as they are and adds a Docker
+> image that builds today: current Debian and calibre, without the Goodreads
+> and WorldCat plugins (both services have closed their APIs). It's built,
+> tested and published by `.github/workflows/docker.yml`:
+>
+> ```
+> docker pull ghcr.io/yeroc03/ebook-tools:latest
+> docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/books" -w /books \
+>     ghcr.io/yeroc03/ebook-tools organize-ebooks.sh --output-folder=organized unorganized/
+> ```
+>
+> The image has no entrypoint: run any of its tools by name
+> (`organize-ebooks.sh`, `calibredb`, `ebook-meta` ...). It's used by
+> [hopper](https://github.com/yeroc03/hopper)'s books example.
+
 This is a collection of bash shell scripts for automated and semi-automated organization and management of large ebook collections. It contains the following tools:
 
 - `organize-ebooks.sh` is used to automatically organize folders with potentially huge amounts of unorganized ebooks. This is done by renaming the files with proper names and moving them to other folders:
